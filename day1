@@ -1,0 +1,1325 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/keito1029/lecture-ai-engineering/blob/master/day1\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "gSpnWBP5ELSI"
+      },
+      "source": [
+        "# 実践演習 Day 1：streamlitとFastAPIのデモ\n",
+        "このノートブックでは以下の内容を学習します。\n",
+        "\n",
+        "- 必要なライブラリのインストールと環境設定\n",
+        "- Hugging Faceからモデルを用いたStreamlitのデモアプリ\n",
+        "- FastAPIとngrokを使用したAPIの公開方法\n",
+        "\n",
+        "演習を始める前に、HuggingFaceとngrokのアカウントを作成し、\n",
+        "それぞれのAPIトークンを取得する必要があります。\n",
+        "\n",
+        "\n",
+        "演習の時間では、以下の3つのディレクトリを順に説明します。\n",
+        "\n",
+        "1. 01_streamlit_UI\n",
+        "2. 02_streamlit_app\n",
+        "3. 03_FastAPI\n",
+        "\n",
+        "2つ目や3つ目からでも始められる様にノートブックを作成しています。\n",
+        "\n",
+        "復習の際にもこのノートブックを役立てていただければと思います。\n",
+        "\n",
+        "### 注意事項\n",
+        "「02_streamlit_app」と「03_FastAPI」では、GPUを使用します。\n",
+        "\n",
+        "これらを実行する際は、Google Colab画面上のメニューから「編集」→ 「ノートブックの設定」\n",
+        "\n",
+        "「ハードウェアアクセラレーター」の項目の中から、「T4 GPU」を選択してください。\n",
+        "\n",
+        "このノートブックのデフォルトは「CPU」になっています。\n",
+        "\n",
+        "---"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "OhtHkJOgELSL"
+      },
+      "source": [
+        "# 環境変数の設定（1~3共有）\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Y-FjBp4MMQHM"
+      },
+      "source": [
+        "GitHubから演習用のコードをCloneします。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "AIXMavdDEP8U",
+        "outputId": "11c9be90-0341-4bbc-96e4-84b85a9ca65f",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        }
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Cloning into 'lecture-ai-engineering'...\n",
+            "remote: Enumerating objects: 41, done.\u001b[K\n",
+            "remote: Counting objects: 100% (32/32), done.\u001b[K\n",
+            "remote: Compressing objects: 100% (27/27), done.\u001b[K\n",
+            "remote: Total 41 (delta 7), reused 5 (delta 5), pack-reused 9 (from 1)\u001b[K\n",
+            "Receiving objects: 100% (41/41), 34.04 KiB | 6.81 MiB/s, done.\n",
+            "Resolving deltas: 100% (7/7), done.\n"
+          ]
+        }
+      ],
+      "source": [
+        "!git clone https://github.com/matsuolab/lecture-ai-engineering.git"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "XC8n7yZ_vs1K"
+      },
+      "source": [
+        "必要なAPIトークンを.envに設定します。\n",
+        "\n",
+        "「lecture-ai-engineering/day1」の配下に、「.env_template」ファイルが存在しています。\n",
+        "\n",
+        "隠しファイルのため表示されていない場合は、画面左側のある、目のアイコンの「隠しファイルの表示」ボタンを押してください。\n",
+        "\n",
+        "「.env_template」のファイル名を「.env」に変更します。「.env」ファイルを開くと、以下のような中身になっています。\n",
+        "\n",
+        "\n",
+        "```\n",
+        "HUGGINGFACE_TOKEN=\"hf-********\"\n",
+        "NGROK_TOKEN=\"********\"\n",
+        "```\n",
+        "ダブルクオーテーションで囲まれた文字列をHuggingfaceのアクセストークンと、ngrokの認証トークンで書き変えてください。\n",
+        "\n",
+        "それぞれのアカウントが作成済みであれば、以下のURLからそれぞれのトークンを取得できます。\n",
+        "\n",
+        "- Huggingfaceのアクセストークン\n",
+        "https://huggingface.co/docs/hub/security-tokens\n",
+        "\n",
+        "- ngrokの認証トークン\n",
+        "https://dashboard.ngrok.com/get-started/your-authtoken\n",
+        "\n",
+        "書き換えたら、「.env」ファイルをローカルのPCにダウンロードしてください。\n",
+        "\n",
+        "「01_streamlit_UI」から「02_streamlit_app」へ進む際に、CPUからGPUの利用に切り替えるため、セッションが一度切れてしまいます。\n",
+        "\n",
+        "その際に、トークンを設定した「.env」ファイルは再作成することになるので、その手間を減らすために「.env」ファイルをダウンロードしておくと良いです。"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Py1BFS5RqcSS"
+      },
+      "source": [
+        "「.env」ファイルを読み込み、環境変数として設定します。次のセルを実行し、最終的に「True」が表示されていればうまく読み込めています。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 2,
+      "metadata": {
+        "id": "bvEowFfg5lrq",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "16fc5c6c-2288-4eb4-eaef-331f6d425e67"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Collecting python-dotenv\n",
+            "  Downloading python_dotenv-1.1.0-py3-none-any.whl.metadata (24 kB)\n",
+            "Downloading python_dotenv-1.1.0-py3-none-any.whl (20 kB)\n",
+            "Installing collected packages: python-dotenv\n",
+            "Successfully installed python-dotenv-1.1.0\n",
+            "/content/lecture-ai-engineering/day1\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "True"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 2
+        }
+      ],
+      "source": [
+        "!pip install python-dotenv\n",
+        "from dotenv import load_dotenv, find_dotenv\n",
+        "\n",
+        "%cd /content/lecture-ai-engineering/day1\n",
+        "load_dotenv(find_dotenv())"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "os0Yk6gaELSM"
+      },
+      "source": [
+        "# 01_streamlit_UI\n",
+        "\n",
+        "ディレクトリ「01_streamlit_UI」に移動します。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 26,
+      "metadata": {
+        "id": "S28XgOm0ELSM",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "6ace6127-01a2-4db7-9dfc-ca6aa6bac59c"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "/content/lecture-ai-engineering/day1/01_streamlit_UI\n"
+          ]
+        }
+      ],
+      "source": [
+        "%cd /content/lecture-ai-engineering/day1/01_streamlit_UI"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "eVp-aEIkELSM"
+      },
+      "source": [
+        "必要なライブラリをインストールします。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 27,
+      "metadata": {
+        "id": "nBe41LFiELSN"
+      },
+      "outputs": [],
+      "source": [
+        "%%capture\n",
+        "!pip install -r requirements.txt"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Yyw6VHaTELSN"
+      },
+      "source": [
+        "ngrokのトークンを使用して、認証を行います。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 11,
+      "metadata": {
+        "id": "aYw1q0iXELSN",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "e337c38a-297b-4706-ddca-de113f1b0ee1"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Authtoken saved to configuration file: /root/.config/ngrok/ngrok.yml\n"
+          ]
+        }
+      ],
+      "source": [
+        "!ngrok authtoken $$NGROK_TOKEN"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "RssTcD_IELSN"
+      },
+      "source": [
+        "アプリを起動します。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 25,
+      "metadata": {
+        "id": "f-E7ucR6ELSN",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "bc22792d-a603-4885-ec99-9176f093a46e"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "公開URL: https://4dd5-34-141-193-32.ngrok-free.app\n",
+            "\n",
+            "Collecting usage statistics. To deactivate, set browser.gatherUsageStats to false.\n",
+            "\u001b[0m\n",
+            "\u001b[0m\n",
+            "\u001b[34m\u001b[1m  You can now view your Streamlit app in your browser.\u001b[0m\n",
+            "\u001b[0m\n",
+            "\u001b[34m  Local URL: \u001b[0m\u001b[1mhttp://localhost:8501\u001b[0m\n",
+            "\u001b[34m  Network URL: \u001b[0m\u001b[1mhttp://172.28.0.12:8501\u001b[0m\n",
+            "\u001b[34m  External URL: \u001b[0m\u001b[1mhttp://34.141.193.32:8501\u001b[0m\n",
+            "\u001b[0m\n",
+            "2025-04-23 07:52:46.902336: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered\n",
+            "WARNING: All log messages before absl::InitializeLog() is called are written to STDERR\n",
+            "E0000 00:00:1745394766.964131   15725 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered\n",
+            "E0000 00:00:1745394766.983983   15725 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered\n",
+            "2025-04-23 07:52:47.032186: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.\n",
+            "To enable the following instructions: AVX2 AVX512F FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.\n",
+            "モデル名を設定: google/gemma-2-2b-jpn-it\n",
+            "/content/lecture-ai-engineering/day1/03_FastAPI/app.py:134: DeprecationWarning: \n",
+            "        on_event is deprecated, use lifespan event handlers instead.\n",
+            "\n",
+            "        Read more about it in the\n",
+            "        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n",
+            "        \n",
+            "  @app.on_event(\"startup\")\n",
+            "FastAPIエンドポイントを定義しました。\n",
+            "t=2025-04-23T07:52:54+0000 lvl=warn msg=\"can't bind default web address, trying alternatives\" obj=web addr=127.0.0.1:4040\n",
+            "ERROR:  authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\n",
+            "ERROR:  You can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\n",
+            "ERROR:  Read more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\n",
+            "ERROR:  You can view your current agent sessions in the dashboard:\n",
+            "ERROR:  https://dashboard.ngrok.com/agents\n",
+            "ERROR:  \n",
+            "ERROR:  ERR_NGROK_108\n",
+            "ERROR:  https://ngrok.com/docs/errors/err_ngrok_108\n",
+            "ERROR:  \n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"failed to reconnect session\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"session closing\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"terminating with error\" obj=app err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "トンネル切断中にエラーが発生しました: The ngrok process errored on start: authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n.\n",
+            "ポート8501に新しいngrokトンネルを開いています...\n",
+            "t=2025-04-23T07:52:55+0000 lvl=warn msg=\"can't bind default web address, trying alternatives\" obj=web addr=127.0.0.1:4040\n",
+            "ERROR:  authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\n",
+            "ERROR:  You can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\n",
+            "ERROR:  Read more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\n",
+            "ERROR:  You can view your current agent sessions in the dashboard:\n",
+            "ERROR:  https://dashboard.ngrok.com/agents\n",
+            "ERROR:  \n",
+            "ERROR:  ERR_NGROK_108\n",
+            "ERROR:  https://ngrok.com/docs/errors/err_ngrok_108\n",
+            "ERROR:  \n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"failed to reconnect session\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"session closing\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"terminating with error\" obj=app err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:52:55+0000 lvl=crit msg=\"command failed\" err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "\n",
+            " ngrokまたはUvicornの起動中にエラーが発生しました: The ngrok process errored on start: authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n.\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/content/lecture-ai-engineering/day1/03_FastAPI/app.py\", line 257, in run_with_ngrok\n",
+            "    ngrok_tunnel = ngrok.connect(port)\n",
+            "                   ^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/pyngrok/ngrok.py\", line 346, in connect\n",
+            "    api_url = get_ngrok_process(pyngrok_config).api_url\n",
+            "              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/pyngrok/ngrok.py\", line 171, in get_ngrok_process\n",
+            "    return process.get_process(pyngrok_config)\n",
+            "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/pyngrok/process.py\", line 265, in get_process\n",
+            "    return _start_process(pyngrok_config)\n",
+            "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/pyngrok/process.py\", line 428, in _start_process\n",
+            "    raise PyngrokNgrokError(f\"The ngrok process errored on start: {ngrok_process.startup_error}.\",\n",
+            "pyngrok.exception.PyngrokNgrokError: The ngrok process errored on start: authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n.\n",
+            "エラーにより残っている可能性のあるngrokトンネルを閉じています...\n",
+            "t=2025-04-23T07:52:55+0000 lvl=warn msg=\"can't bind default web address, trying alternatives\" obj=web addr=127.0.0.1:4040\n",
+            "ERROR:  authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\n",
+            "ERROR:  You can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\n",
+            "ERROR:  Read more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\n",
+            "ERROR:  You can view your current agent sessions in the dashboard:\n",
+            "ERROR:  https://dashboard.ngrok.com/agents\n",
+            "ERROR:  \n",
+            "ERROR:  ERR_NGROK_108\n",
+            "ERROR:  https://ngrok.com/docs/errors/err_ngrok_108\n",
+            "ERROR:  \n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"failed to reconnect session\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"session closing\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:52:55+0000 lvl=eror msg=\"terminating with error\" obj=app err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:52:55+0000 lvl=crit msg=\"command failed\" err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "ngrokトンネルのクリーンアップ中に別のエラーが発生しました: The ngrok process errored on start: authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n.\n",
+            "\n",
+            "サーバープロセスが終了しました。\n",
+            "2025-04-23 07:52:56.673 Examining the path of torch.classes raised:\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/web/bootstrap.py\", line 347, in run\n",
+            "    if asyncio.get_running_loop().is_running():\n",
+            "       ^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: no running event loop\n",
+            "\n",
+            "During handling of the above exception, another exception occurred:\n",
+            "\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/watcher/local_sources_watcher.py\", line 217, in get_module_paths\n",
+            "    potential_paths = extract_paths(module)\n",
+            "                      ^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/watcher/local_sources_watcher.py\", line 210, in <lambda>\n",
+            "    lambda m: list(m.__path__._path),\n",
+            "                   ^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/torch/_classes.py\", line 13, in __getattr__\n",
+            "    proxy = torch._C._get_custom_class_python_wrapper(self.name, attr)\n",
+            "            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: Tried to instantiate class '__path__._path', but it does not exist! Ensure that it is registered via torch::class_\n",
+            "モデル名を設定: google/gemma-2-2b-jpn-it\n",
+            "/content/lecture-ai-engineering/day1/03_FastAPI/app.py:135: DeprecationWarning: \n",
+            "        on_event is deprecated, use lifespan event handlers instead.\n",
+            "\n",
+            "        Read more about it in the\n",
+            "        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n",
+            "        \n",
+            "  async def startup_event():\n",
+            "FastAPIエンドポイントを定義しました。\n",
+            "t=2025-04-23T07:54:36+0000 lvl=warn msg=\"can't bind default web address, trying alternatives\" obj=web addr=127.0.0.1:4040\n",
+            "t=2025-04-23T07:54:37+0000 lvl=eror msg=\"failed to reconnect session\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:37+0000 lvl=eror msg=\"session closing\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:37+0000 lvl=eror msg=\"terminating with error\" obj=app err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "ERROR:  authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\n",
+            "t=2025-04-23T07:54:37+0000 lvl=crit msg=\"command failed\" err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:37+0000 lvl=warn msg=\"failed to check for update\" obj=updater err=\"Post \\\"https://update.equinox.io/check\\\": context canceled\"\n",
+            "ERROR:  You can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\n",
+            "ERROR:  Read more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\n",
+            "ERROR:  You can view your current agent sessions in the dashboard:\n",
+            "ERROR:  https://dashboard.ngrok.com/agents\n",
+            "ERROR:  \n",
+            "ERROR:  ERR_NGROK_108\n",
+            "ERROR:  https://ngrok.com/docs/errors/err_ngrok_108\n",
+            "ERROR:  \n",
+            "トンネル切断中にエラーが発生しました: The ngrok process errored on start: authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n.\n",
+            "ポート8501に新しいngrokトンネルを開いています...\n",
+            "t=2025-04-23T07:54:37+0000 lvl=warn msg=\"can't bind default web address, trying alternatives\" obj=web addr=127.0.0.1:4040\n",
+            "t=2025-04-23T07:54:37+0000 lvl=eror msg=\"failed to reconnect session\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:37+0000 lvl=eror msg=\"session closing\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:37+0000 lvl=eror msg=\"terminating with error\" obj=app err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:37+0000 lvl=warn msg=\"failed to check for update\" obj=updater err=\"Post \\\"https://update.equinox.io/check\\\": context canceled\"\n",
+            "ERROR:  authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\n",
+            "ERROR:  You can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\n",
+            "ERROR:  Read more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\n",
+            "ERROR:  You can view your current agent sessions in the dashboard:\n",
+            "ERROR:  https://dashboard.ngrok.com/agents\n",
+            "ERROR:  \n",
+            "ERROR:  ERR_NGROK_108\n",
+            "ERROR:  https://ngrok.com/docs/errors/err_ngrok_108\n",
+            "ERROR:  \n",
+            "t=2025-04-23T07:54:37+0000 lvl=crit msg=\"command failed\" err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "\n",
+            " ngrokまたはUvicornの起動中にエラーが発生しました: The ngrok process errored on start: authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n.\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/content/lecture-ai-engineering/day1/03_FastAPI/app.py\", line 258, in run_with_ngrok\n",
+            "    ngrok_tunnel = ngrok.connect(port)\n",
+            "                   ^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/pyngrok/ngrok.py\", line 346, in connect\n",
+            "    api_url = get_ngrok_process(pyngrok_config).api_url\n",
+            "              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/pyngrok/ngrok.py\", line 171, in get_ngrok_process\n",
+            "    return process.get_process(pyngrok_config)\n",
+            "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/pyngrok/process.py\", line 265, in get_process\n",
+            "    return _start_process(pyngrok_config)\n",
+            "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/pyngrok/process.py\", line 428, in _start_process\n",
+            "    raise PyngrokNgrokError(f\"The ngrok process errored on start: {ngrok_process.startup_error}.\",\n",
+            "pyngrok.exception.PyngrokNgrokError: The ngrok process errored on start: authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n.\n",
+            "エラーにより残っている可能性のあるngrokトンネルを閉じています...\n",
+            "t=2025-04-23T07:54:37+0000 lvl=warn msg=\"can't bind default web address, trying alternatives\" obj=web addr=127.0.0.1:4040\n",
+            "ERROR:  authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\n",
+            "ERROR:  You can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\n",
+            "ERROR:  Read more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\n",
+            "ERROR:  You can view your current agent sessions in the dashboard:\n",
+            "ERROR:  https://dashboard.ngrok.com/agents\n",
+            "ERROR:  \n",
+            "ERROR:  ERR_NGROK_108\n",
+            "ERROR:  https://ngrok.com/docs/errors/err_ngrok_108\n",
+            "ERROR:  \n",
+            "t=2025-04-23T07:54:38+0000 lvl=eror msg=\"failed to reconnect session\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:38+0000 lvl=eror msg=\"session closing\" obj=tunnels.session err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:38+0000 lvl=eror msg=\"terminating with error\" obj=app err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "t=2025-04-23T07:54:38+0000 lvl=crit msg=\"command failed\" err=\"authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n\"\n",
+            "ngrokトンネルのクリーンアップ中に別のエラーが発生しました: The ngrok process errored on start: authentication failed: Your account is limited to 1 simultaneous ngrok agent sessions.\\nYou can run multiple simultaneous tunnels from a single agent session by defining the tunnels in your agent configuration file and starting them with the command `ngrok start --all`.\\nRead more about the agent configuration file: https://ngrok.com/docs/secure-tunnels/ngrok-agent/reference/config\\nYou can view your current agent sessions in the dashboard:\\nhttps://dashboard.ngrok.com/agents\\r\\n\\r\\nERR_NGROK_108\\r\\n.\n",
+            "\n",
+            "サーバープロセスが終了しました。\n",
+            "2025-04-23 07:54:38.732 Examining the path of torch.classes raised:\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/web/bootstrap.py\", line 347, in run\n",
+            "    if asyncio.get_running_loop().is_running():\n",
+            "       ^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: no running event loop\n",
+            "\n",
+            "During handling of the above exception, another exception occurred:\n",
+            "\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/watcher/local_sources_watcher.py\", line 217, in get_module_paths\n",
+            "    potential_paths = extract_paths(module)\n",
+            "                      ^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/watcher/local_sources_watcher.py\", line 210, in <lambda>\n",
+            "    lambda m: list(m.__path__._path),\n",
+            "                   ^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/torch/_classes.py\", line 13, in __getattr__\n",
+            "    proxy = torch._C._get_custom_class_python_wrapper(self.name, attr)\n",
+            "            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: Tried to instantiate class '__path__._path', but it does not exist! Ensure that it is registered via torch::class_\n",
+            "\u001b[34m  Stopping...\u001b[0m\n",
+            "\u001b[34m  Stopping...\u001b[0m\n"
+          ]
+        }
+      ],
+      "source": [
+        "from pyngrok import ngrok\n",
+        "\n",
+        "public_url = ngrok.connect(8501).public_url\n",
+        "print(f\"公開URL: {public_url}\")\n",
+        "!streamlit run app.py"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "kbYyXVFjELSN"
+      },
+      "source": [
+        "公開URLの後に記載されているURLにブラウザでアクセスすると、streamlitのUIが表示されます。\n",
+        "\n",
+        "app.pyのコメントアウトされている箇所を編集することで、UIがどの様に変化するか確認してみましょう。\n",
+        "\n",
+        "streamlitの公式ページには、ギャラリーページがあります。\n",
+        "\n",
+        "streamlitを使うとpythonという一つの言語であっても、様々なUIを実現できることがわかると思います。\n",
+        "\n",
+        "https://streamlit.io/gallery"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "MmtP5GLOELSN"
+      },
+      "source": [
+        "後片付けとして、使う必要のないngrokのトンネルを削除します。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 13,
+      "metadata": {
+        "id": "8Ek9QgahELSO"
+      },
+      "outputs": [],
+      "source": [
+        "from pyngrok import ngrok\n",
+        "ngrok.kill()"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "o-T8tFpyELSO"
+      },
+      "source": [
+        "# 02_streamlit_app"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "QqogFQKnELSO"
+      },
+      "source": [
+        "\n",
+        "ディレクトリ「02_streamlit_app」に移動します。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 14,
+      "metadata": {
+        "id": "UeEjlJ7uELSO",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "03851e2b-5769-4a1f-fad6-51d16d1a0fb8"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "/content/lecture-ai-engineering/day1/02_streamlit_app\n"
+          ]
+        }
+      ],
+      "source": [
+        "%cd /content/lecture-ai-engineering/day1/02_streamlit_app"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "-XUH2AstELSO"
+      },
+      "source": [
+        "必要なライブラリをインストールします。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 15,
+      "metadata": {
+        "id": "mDqvI4V3ELSO"
+      },
+      "outputs": [],
+      "source": [
+        "%%capture\n",
+        "!pip install -r requirements.txt"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ZO31umGZELSO"
+      },
+      "source": [
+        "ngrokとhuggigfaceのトークンを使用して、認証を行います。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 16,
+      "metadata": {
+        "id": "jPxTiEWQELSO",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "46ecc17c-f77c-4979-e71d-dee350a240a3"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Authtoken saved to configuration file: /root/.config/ngrok/ngrok.yml\n",
+            "The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `huggingface-cli` if you want to set the git credential as well.\n",
+            "Token is valid (permission: fineGrained).\n",
+            "The token `hub-matsulab` has been saved to /root/.cache/huggingface/stored_tokens\n",
+            "Your token has been saved to /root/.cache/huggingface/token\n",
+            "Login successful.\n",
+            "The current active token is: `hub-matsulab`\n"
+          ]
+        }
+      ],
+      "source": [
+        "!ngrok authtoken $$NGROK_TOKEN\n",
+        "!huggingface-cli login --token $$HUGGINGFACE_TOKEN"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "dz4WrELLELSP"
+      },
+      "source": [
+        "stramlitでHuggingfaceのトークン情報を扱うために、streamlit用の設定ファイル（.streamlit）を作成し、トークンの情報を格納します。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 17,
+      "metadata": {
+        "id": "W184-a7qFP0W"
+      },
+      "outputs": [],
+      "source": [
+        "# .streamlit/secrets.toml ファイルを作成\n",
+        "import os\n",
+        "import toml\n",
+        "\n",
+        "# 設定ファイルのディレクトリ確保\n",
+        "os.makedirs('.streamlit', exist_ok=True)\n",
+        "\n",
+        "# 環境変数から取得したトークンを設定ファイルに書き込む\n",
+        "secrets = {\n",
+        "    \"huggingface\": {\n",
+        "        \"token\": os.environ.get(\"HUGGINGFACE_TOKEN\", \"\")\n",
+        "    }\n",
+        "}\n",
+        "\n",
+        "# 設定ファイルを書き込む\n",
+        "with open('.streamlit/secrets.toml', 'w') as f:\n",
+        "    toml.dump(secrets, f)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "fK0vI_xKELSP"
+      },
+      "source": [
+        "アプリを起動します。\n",
+        "\n",
+        "02_streamlit_appでは、Huggingfaceからモデルをダウンロードするため、初回起動には2分程度時間がかかります。\n",
+        "\n",
+        "この待ち時間を利用して、app.pyのコードを確認してみましょう。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 18,
+      "metadata": {
+        "id": "TBQyTTWTELSP",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "292fcd6b-0611-4cfa-eb3d-b89ecd33f865"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "公開URL: https://9d62-34-141-193-32.ngrok-free.app\n",
+            "\n",
+            "Collecting usage statistics. To deactivate, set browser.gatherUsageStats to false.\n",
+            "\u001b[0m\n",
+            "\u001b[0m\n",
+            "\u001b[34m\u001b[1m  You can now view your Streamlit app in your browser.\u001b[0m\n",
+            "\u001b[0m\n",
+            "\u001b[34m  Local URL: \u001b[0m\u001b[1mhttp://localhost:8501\u001b[0m\n",
+            "\u001b[34m  Network URL: \u001b[0m\u001b[1mhttp://172.28.0.12:8501\u001b[0m\n",
+            "\u001b[34m  External URL: \u001b[0m\u001b[1mhttp://34.141.193.32:8501\u001b[0m\n",
+            "\u001b[0m\n",
+            "NLTK loaded successfully.\n",
+            "2025-04-23 07:26:51.551683: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered\n",
+            "WARNING: All log messages before absl::InitializeLog() is called are written to STDERR\n",
+            "E0000 00:00:1745393211.824586    9098 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered\n",
+            "E0000 00:00:1745393211.896052    9098 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered\n",
+            "2025-04-23 07:26:52.505381: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.\n",
+            "To enable the following instructions: AVX2 AVX512F FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.\n",
+            "NLTK Punkt data checked/downloaded.\n",
+            "Database 'chat_feedback.db' initialized successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "Data saved to DB successfully.\n",
+            "config.json: 100% 805/805 [00:00<00:00, 5.03MB/s]\n",
+            "model.safetensors.index.json: 100% 24.2k/24.2k [00:00<00:00, 76.5MB/s]\n",
+            "Fetching 2 files:   0% 0/2 [00:00<?, ?it/s]\n",
+            "model-00001-of-00002.safetensors:   0% 0.00/4.99G [00:00<?, ?B/s]\u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:   0% 0.00/241M [00:00<?, ?B/s]\u001b[A\u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:   9% 21.0M/241M [00:00<00:01, 182MB/s]\u001b[A\u001b[A\n",
+            "model-00001-of-00002.safetensors:   0% 21.0M/4.99G [00:00<00:30, 162MB/s]\u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:  22% 52.4M/241M [00:00<00:00, 248MB/s]\u001b[A\u001b[A\n",
+            "model-00001-of-00002.safetensors:   1% 52.4M/4.99G [00:00<00:28, 173MB/s]\u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:  35% 83.9M/241M [00:00<00:00, 229MB/s]\u001b[A\u001b[A\n",
+            "model-00001-of-00002.safetensors:   1% 73.4M/4.99G [00:00<00:29, 168MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:   2% 94.4M/4.99G [00:00<00:27, 177MB/s]\u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:  48% 115M/241M [00:00<00:00, 183MB/s] \u001b[A\u001b[A\n",
+            "model-00001-of-00002.safetensors:   3% 126M/4.99G [00:00<00:22, 213MB/s] \u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:  57% 136M/241M [00:00<00:00, 188MB/s]\u001b[A\u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:  65% 157M/241M [00:00<00:00, 192MB/s]\u001b[A\u001b[A\n",
+            "model-00001-of-00002.safetensors:   3% 157M/4.99G [00:00<00:25, 187MB/s]\u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:  78% 189M/241M [00:00<00:00, 209MB/s]\u001b[A\u001b[A\n",
+            "model-00001-of-00002.safetensors:   4% 178M/4.99G [00:00<00:27, 177MB/s]\u001b[A\n",
+            "\n",
+            "model-00002-of-00002.safetensors:  91% 220M/241M [00:01<00:00, 205MB/s]\u001b[A\u001b[A\n",
+            "model-00002-of-00002.safetensors: 100% 241M/241M [00:01<00:00, 187MB/s]\n",
+            "\n",
+            "model-00001-of-00002.safetensors:   4% 220M/4.99G [00:01<00:32, 147MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:   5% 252M/4.99G [00:01<00:28, 166MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:   6% 283M/4.99G [00:01<00:25, 185MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:   6% 315M/4.99G [00:01<00:22, 212MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:   7% 346M/4.99G [00:01<00:20, 224MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:   8% 377M/4.99G [00:01<00:20, 223MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:   8% 419M/4.99G [00:02<00:18, 251MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:   9% 451M/4.99G [00:04<01:42, 44.4MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  10% 493M/4.99G [00:04<01:09, 64.9MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  11% 535M/4.99G [00:04<00:49, 89.9MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  12% 577M/4.99G [00:04<00:37, 118MB/s] \u001b[A\n",
+            "model-00001-of-00002.safetensors:  12% 608M/4.99G [00:04<00:31, 139MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  13% 650M/4.99G [00:04<00:24, 174MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  14% 692M/4.99G [00:04<00:20, 207MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  15% 734M/4.99G [00:05<00:17, 238MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  16% 776M/4.99G [00:05<00:16, 262MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  16% 818M/4.99G [00:05<00:15, 277MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  17% 860M/4.99G [00:05<00:14, 293MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  18% 902M/4.99G [00:05<00:13, 301MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  19% 944M/4.99G [00:05<00:13, 298MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  20% 986M/4.99G [00:05<00:12, 311MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  21% 1.03G/4.99G [00:05<00:13, 299MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  21% 1.06G/4.99G [00:06<00:13, 290MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  22% 1.09G/4.99G [00:06<00:14, 271MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  22% 1.12G/4.99G [00:06<00:14, 262MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  23% 1.15G/4.99G [00:06<00:15, 248MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  24% 1.18G/4.99G [00:06<00:14, 254MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  24% 1.22G/4.99G [00:06<00:15, 236MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  25% 1.26G/4.99G [00:06<00:14, 264MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  26% 1.29G/4.99G [00:07<00:15, 244MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  27% 1.33G/4.99G [00:07<00:14, 248MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  27% 1.36G/4.99G [00:07<00:14, 256MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  28% 1.39G/4.99G [00:07<00:15, 231MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  29% 1.43G/4.99G [00:07<00:15, 232MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  29% 1.46G/4.99G [00:07<00:15, 227MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  30% 1.49G/4.99G [00:07<00:15, 225MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  30% 1.52G/4.99G [00:08<00:16, 216MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  31% 1.55G/4.99G [00:08<00:14, 231MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  32% 1.58G/4.99G [00:08<00:14, 240MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  32% 1.61G/4.99G [00:08<00:13, 251MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  33% 1.65G/4.99G [00:08<00:12, 260MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  34% 1.68G/4.99G [00:08<00:12, 271MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  34% 1.71G/4.99G [00:08<00:12, 272MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  35% 1.75G/4.99G [00:08<00:11, 293MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  36% 1.79G/4.99G [00:09<00:11, 278MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  37% 1.82G/4.99G [00:09<00:11, 267MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  37% 1.86G/4.99G [00:09<00:12, 255MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  38% 1.89G/4.99G [00:09<00:11, 260MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  38% 1.92G/4.99G [00:09<00:11, 258MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  39% 1.95G/4.99G [00:09<00:11, 258MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  40% 1.98G/4.99G [00:09<00:12, 245MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  40% 2.01G/4.99G [00:09<00:11, 254MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  41% 2.04G/4.99G [00:10<00:11, 262MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  42% 2.08G/4.99G [00:10<00:10, 266MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  42% 2.11G/4.99G [00:10<00:11, 259MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  43% 2.14G/4.99G [00:10<00:11, 256MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  44% 2.18G/4.99G [00:10<00:11, 242MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  44% 2.21G/4.99G [00:10<00:14, 195MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  45% 2.24G/4.99G [00:10<00:12, 214MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  46% 2.28G/4.99G [00:11<00:12, 223MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  46% 2.31G/4.99G [00:11<00:11, 239MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  47% 2.34G/4.99G [00:11<00:11, 240MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  48% 2.37G/4.99G [00:11<00:10, 247MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  48% 2.40G/4.99G [00:11<00:10, 250MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  49% 2.43G/4.99G [00:11<00:10, 240MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  49% 2.46G/4.99G [00:11<00:09, 255MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  50% 2.50G/4.99G [00:11<00:09, 260MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  51% 2.53G/4.99G [00:12<00:13, 184MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  52% 2.57G/4.99G [00:12<00:11, 217MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  52% 2.61G/4.99G [00:12<00:09, 248MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  53% 2.65G/4.99G [00:12<00:08, 275MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  54% 2.69G/4.99G [00:12<00:07, 294MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  55% 2.74G/4.99G [00:12<00:07, 311MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  56% 2.78G/4.99G [00:12<00:07, 309MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  57% 2.82G/4.99G [00:13<00:07, 299MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  57% 2.85G/4.99G [00:13<00:07, 285MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  58% 2.88G/4.99G [00:13<00:07, 273MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  58% 2.92G/4.99G [00:13<00:07, 270MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  59% 2.95G/4.99G [00:13<00:07, 256MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  60% 2.98G/4.99G [00:13<00:07, 260MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  60% 3.01G/4.99G [00:13<00:07, 251MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  61% 3.04G/4.99G [00:14<00:07, 255MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  62% 3.07G/4.99G [00:14<00:07, 258MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  62% 3.10G/4.99G [00:14<00:07, 254MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  63% 3.14G/4.99G [00:14<00:07, 252MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  63% 3.17G/4.99G [00:16<00:42, 43.1MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  64% 3.21G/4.99G [00:16<00:27, 63.7MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  65% 3.25G/4.99G [00:16<00:19, 89.4MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  66% 3.29G/4.99G [00:16<00:14, 119MB/s] \u001b[A\n",
+            "model-00001-of-00002.safetensors:  67% 3.33G/4.99G [00:16<00:11, 149MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  68% 3.38G/4.99G [00:17<00:09, 175MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  69% 3.42G/4.99G [00:17<00:07, 207MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  69% 3.46G/4.99G [00:17<00:06, 237MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  70% 3.50G/4.99G [00:17<00:05, 265MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  71% 3.54G/4.99G [00:17<00:05, 280MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  72% 3.59G/4.99G [00:17<00:04, 293MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  73% 3.63G/4.99G [00:17<00:04, 306MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  74% 3.67G/4.99G [00:18<00:04, 291MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  74% 3.70G/4.99G [00:18<00:04, 285MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  75% 3.73G/4.99G [00:18<00:04, 275MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  75% 3.76G/4.99G [00:18<00:04, 266MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  76% 3.80G/4.99G [00:18<00:04, 267MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  77% 3.83G/4.99G [00:18<00:04, 262MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  77% 3.86G/4.99G [00:18<00:04, 248MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  78% 3.90G/4.99G [00:18<00:04, 265MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  79% 3.93G/4.99G [00:19<00:04, 253MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  79% 3.96G/4.99G [00:19<00:03, 259MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  80% 4.00G/4.99G [00:19<00:03, 261MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  81% 4.03G/4.99G [00:19<00:03, 253MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  81% 4.06G/4.99G [00:19<00:03, 255MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  82% 4.09G/4.99G [00:19<00:03, 250MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  83% 4.12G/4.99G [00:19<00:03, 246MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  83% 4.15G/4.99G [00:19<00:03, 253MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  84% 4.18G/4.99G [00:20<00:03, 249MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  85% 4.22G/4.99G [00:21<00:11, 64.5MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  85% 4.25G/4.99G [00:21<00:08, 83.8MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  86% 4.29G/4.99G [00:21<00:06, 116MB/s] \u001b[A\n",
+            "model-00001-of-00002.safetensors:  87% 4.32G/4.99G [00:21<00:04, 136MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  87% 4.35G/4.99G [00:21<00:04, 157MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  88% 4.38G/4.99G [00:22<00:03, 175MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  89% 4.41G/4.99G [00:22<00:02, 194MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  89% 4.45G/4.99G [00:22<00:03, 154MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  90% 4.49G/4.99G [00:22<00:02, 191MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  91% 4.52G/4.99G [00:22<00:02, 212MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  91% 4.56G/4.99G [00:22<00:01, 240MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  92% 4.59G/4.99G [00:22<00:01, 249MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  93% 4.62G/4.99G [00:23<00:01, 231MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  93% 4.66G/4.99G [00:23<00:01, 212MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  94% 4.69G/4.99G [00:23<00:01, 210MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  95% 4.72G/4.99G [00:26<00:09, 28.6MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  95% 4.76G/4.99G [00:26<00:05, 42.8MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  96% 4.80G/4.99G [00:27<00:03, 60.9MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  97% 4.84G/4.99G [00:27<00:01, 83.7MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors:  98% 4.89G/4.99G [00:27<00:00, 111MB/s] \u001b[A\n",
+            "model-00001-of-00002.safetensors:  99% 4.93G/4.99G [00:27<00:00, 141MB/s]\u001b[A\n",
+            "model-00001-of-00002.safetensors: 100% 4.99G/4.99G [00:27<00:00, 180MB/s]\n",
+            "Fetching 2 files: 100% 2/2 [00:27<00:00, 13.90s/it]\n",
+            "Loading checkpoint shards: 100% 2/2 [00:00<00:00,  9.59it/s]\n",
+            "generation_config.json: 100% 168/168 [00:00<00:00, 898kB/s]\n",
+            "tokenizer_config.json: 100% 46.9k/46.9k [00:00<00:00, 63.7MB/s]\n",
+            "tokenizer.model: 100% 4.24M/4.24M [00:00<00:00, 37.7MB/s]\n",
+            "tokenizer.json: 100% 17.5M/17.5M [00:00<00:00, 144MB/s]\n",
+            "special_tokens_map.json: 100% 555/555 [00:00<00:00, 3.99MB/s]\n",
+            "Device set to use cuda\n",
+            "2025-04-23 07:27:54.288 Examining the path of torch.classes raised:\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/web/bootstrap.py\", line 347, in run\n",
+            "    if asyncio.get_running_loop().is_running():\n",
+            "       ^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: no running event loop\n",
+            "\n",
+            "During handling of the above exception, another exception occurred:\n",
+            "\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/watcher/local_sources_watcher.py\", line 217, in get_module_paths\n",
+            "    potential_paths = extract_paths(module)\n",
+            "                      ^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/watcher/local_sources_watcher.py\", line 210, in <lambda>\n",
+            "    lambda m: list(m.__path__._path),\n",
+            "                   ^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/torch/_classes.py\", line 13, in __getattr__\n",
+            "    proxy = torch._C._get_custom_class_python_wrapper(self.name, attr)\n",
+            "            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: Tried to instantiate class '__path__._path', but it does not exist! Ensure that it is registered via torch::class_\n",
+            "NLTK Punkt data checked/downloaded.\n",
+            "Database 'chat_feedback.db' initialized successfully.\n",
+            "NLTK Punkt data checked/downloaded.\n",
+            "Database 'chat_feedback.db' initialized successfully.\n",
+            "Generated response in 3.39s\n",
+            "NLTK Punkt data checked/downloaded.\n",
+            "Database 'chat_feedback.db' initialized successfully.\n",
+            "NLTK Punkt data checked/downloaded.\n",
+            "Database 'chat_feedback.db' initialized successfully.\n",
+            "Data saved to DB successfully.\n",
+            "NLTK Punkt data checked/downloaded.\n",
+            "Database 'chat_feedback.db' initialized successfully.\n",
+            "NLTK Punkt data checked/downloaded.\n",
+            "Database 'chat_feedback.db' initialized successfully.\n",
+            "2025-04-23 07:30:10.925 Examining the path of torch.classes raised:\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/web/bootstrap.py\", line 347, in run\n",
+            "    if asyncio.get_running_loop().is_running():\n",
+            "       ^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: no running event loop\n",
+            "\n",
+            "During handling of the above exception, another exception occurred:\n",
+            "\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/watcher/local_sources_watcher.py\", line 217, in get_module_paths\n",
+            "    potential_paths = extract_paths(module)\n",
+            "                      ^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/watcher/local_sources_watcher.py\", line 210, in <lambda>\n",
+            "    lambda m: list(m.__path__._path),\n",
+            "                   ^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/torch/_classes.py\", line 13, in __getattr__\n",
+            "    proxy = torch._C._get_custom_class_python_wrapper(self.name, attr)\n",
+            "            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "RuntimeError: Tried to instantiate class '__path__._path', but it does not exist! Ensure that it is registered via torch::class_\n",
+            "\u001b[34m  Stopping...\u001b[0m\n",
+            "\u001b[34m  Stopping...\u001b[0m\n",
+            "Exception ignored in: <module 'threading' from '/usr/lib/python3.11/threading.py'>\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/lib/python3.11/threading.py\", line 1560, in _shutdown\n",
+            "    atexit_call()\n",
+            "  File \"/usr/lib/python3.11/concurrent/futures/thread.py\", line 31, in _python_exit\n",
+            "    t.join()\n",
+            "  File \"/usr/lib/python3.11/threading.py\", line 1119, in join\n",
+            "    self._wait_for_tstate_lock()\n",
+            "  File \"/usr/lib/python3.11/threading.py\", line 1139, in _wait_for_tstate_lock\n",
+            "    if lock.acquire(block, timeout):\n",
+            "       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/web/bootstrap.py\", line 44, in signal_handler\n",
+            "    server.stop()\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/web/server/server.py\", line 470, in stop\n",
+            "    self._runtime.stop()\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/streamlit/runtime/runtime.py\", line 337, in stop\n",
+            "    async_objs.eventloop.call_soon_threadsafe(stop_on_eventloop)\n",
+            "  File \"/usr/lib/python3.11/asyncio/base_events.py\", line 807, in call_soon_threadsafe\n",
+            "    self._check_closed()\n",
+            "  File \"/usr/lib/python3.11/asyncio/base_events.py\", line 520, in _check_closed\n",
+            "    raise RuntimeError('Event loop is closed')\n",
+            "RuntimeError: Event loop is closed\n"
+          ]
+        }
+      ],
+      "source": [
+        "from pyngrok import ngrok\n",
+        "\n",
+        "public_url = ngrok.connect(8501).public_url\n",
+        "print(f\"公開URL: {public_url}\")\n",
+        "!streamlit run app.py"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "1YAWHLiWSvZg"
+      },
+      "source": [
+        "アプリケーションの機能としては、チャット機能や履歴閲覧があります。\n",
+        "\n",
+        "これらの機能を実現するためには、StreamlitによるUI部分だけではなく、SQLiteを使用したチャット履歴の保存やLLMのモデルを呼び出した推論などの処理を組み合わせることで実現しています。\n",
+        "\n",
+        "- **`app.py`**: アプリケーションのエントリーポイント。チャット機能、履歴閲覧、サンプルデータ管理のUIを提供します。\n",
+        "- **`ui.py`**: チャットページや履歴閲覧ページなど、アプリケーションのUIロジックを管理します。\n",
+        "- **`llm.py`**: LLMモデルのロードとテキスト生成を行うモジュール。\n",
+        "- **`database.py`**: SQLiteデータベースを使用してチャット履歴やフィードバックを保存・管理します。\n",
+        "- **`metrics.py`**: BLEUスコアやコサイン類似度など、回答の評価指標を計算するモジュール。\n",
+        "- **`data.py`**: サンプルデータの作成やデータベースの初期化を行うモジュール。\n",
+        "- **`config.py`**: アプリケーションの設定（モデル名やデータベースファイル名）を管理します。\n",
+        "- **`requirements.txt`**: このアプリケーションを実行するために必要なPythonパッケージ。"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Xvm8sWFPELSP"
+      },
+      "source": [
+        "後片付けとして、使う必要のないngrokのトンネルを削除します。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 19,
+      "metadata": {
+        "id": "WFJC2TmZELSP"
+      },
+      "outputs": [],
+      "source": [
+        "from pyngrok import ngrok\n",
+        "ngrok.kill()"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "rUXhIzV7ELSP"
+      },
+      "source": [
+        "# 03_FastAPI\n",
+        "\n",
+        "ディレクトリ「03_FastAPI」に移動します。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 20,
+      "metadata": {
+        "id": "4ejjDLxr3kfC",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "72ac370c-d54c-4b74-b51e-829a7b9b4237"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "/content/lecture-ai-engineering/day1/03_FastAPI\n"
+          ]
+        }
+      ],
+      "source": [
+        "%cd /content/lecture-ai-engineering/day1/03_FastAPI"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "f45TDsNzELSQ"
+      },
+      "source": [
+        "必要なライブラリをインストールします。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 21,
+      "metadata": {
+        "id": "9uv6glCz5a7Z"
+      },
+      "outputs": [],
+      "source": [
+        "%%capture\n",
+        "!pip install -r requirements.txt"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "JfrmE2VmELSQ"
+      },
+      "source": [
+        "ngrokとhuggigfaceのトークンを使用して、認証を行います。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 22,
+      "metadata": {
+        "id": "ELzWhMFORRIO",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "b704d12b-024f-4640-b7d0-74dad2718844"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Authtoken saved to configuration file: /root/.config/ngrok/ngrok.yml\n",
+            "The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `huggingface-cli` if you want to set the git credential as well.\n",
+            "Token is valid (permission: fineGrained).\n",
+            "The token `hub-matsulab` has been saved to /root/.cache/huggingface/stored_tokens\n",
+            "Your token has been saved to /root/.cache/huggingface/token\n",
+            "Login successful.\n",
+            "The current active token is: `hub-matsulab`\n"
+          ]
+        }
+      ],
+      "source": [
+        "!ngrok authtoken $$NGROK_TOKEN\n",
+        "!huggingface-cli login --token $$HUGGINGFACE_TOKEN"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "t-wztc2CELSQ"
+      },
+      "source": [
+        "アプリを起動します。\n",
+        "\n",
+        "「02_streamlit_app」から続けて「03_FastAPI」を実行している場合は、モデルのダウンロードが済んでいるため、すぐにサービスが立ち上がります。\n",
+        "\n",
+        "「03_FastAPI」のみを実行している場合は、初回の起動時にモデルのダウンロードが始まるので、モデルのダウンロードが終わるまで数分間待ちましょう。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 24,
+      "metadata": {
+        "id": "meQ4SwISn3IQ",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "ab1dd8c3-e8d8-4fe9-8d05-07bdc377014e"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "2025-04-23 07:50:47.850567: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered\n",
+            "WARNING: All log messages before absl::InitializeLog() is called are written to STDERR\n",
+            "E0000 00:00:1745394647.870824   15175 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered\n",
+            "E0000 00:00:1745394647.877130   15175 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered\n",
+            "2025-04-23 07:50:47.898003: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.\n",
+            "To enable the following instructions: AVX2 AVX512F FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.\n",
+            "モデル名を設定: google/gemma-2-2b-jpn-it\n",
+            "/content/lecture-ai-engineering/day1/03_FastAPI/app.py:134: DeprecationWarning: \n",
+            "        on_event is deprecated, use lifespan event handlers instead.\n",
+            "\n",
+            "        Read more about it in the\n",
+            "        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).\n",
+            "        \n",
+            "  @app.on_event(\"startup\")\n",
+            "FastAPIエンドポイントを定義しました。\n",
+            "アクティブなngrokトンネルはありません。\n",
+            "ポート8501に新しいngrokトンネルを開いています...\n",
+            "---------------------------------------------------------------------\n",
+            "③ 公開URL:   https://6e55-34-141-193-32.ngrok-free.app\n",
+            "③ APIドキュメント (Swagger UI): https://6e55-34-141-193-32.ngrok-free.app/docs\n",
+            "---------------------------------------------------------------------\n",
+            "(APIクライアントやブラウザからアクセスするためにこのURLをコピーしてください)\n",
+            "\u001b[32mINFO\u001b[0m:     Started server process [\u001b[36m15175\u001b[0m]\n",
+            "\u001b[32mINFO\u001b[0m:     Waiting for application startup.\n",
+            "load_model_task: モデルの読み込みを開始...\n",
+            "使用デバイス: cuda\n",
+            "Loading checkpoint shards: 100% 2/2 [00:00<00:00, 23.79it/s]\n",
+            "Device set to use cuda\n",
+            "t=2025-04-23T07:51:08+0000 lvl=warn msg=\"failed to open private leg\" id=3bb167b4bc64 privaddr=localhost:8501 err=\"dial tcp 127.0.0.1:8501: connect: connection refused\"\n",
+            "t=2025-04-23T07:51:10+0000 lvl=warn msg=\"failed to open private leg\" id=c66c5bb7db48 privaddr=localhost:8501 err=\"dial tcp 127.0.0.1:8501: connect: connection refused\"\n",
+            "モデル 'google/gemma-2-2b-jpn-it' の読み込みに成功しました\n",
+            "load_model_task: モデルの読み込みが完了しました。\n",
+            "起動時にモデルの初期化が完了しました。\n",
+            "\u001b[32mINFO\u001b[0m:     Application startup complete.\n",
+            "\u001b[32mINFO\u001b[0m:     Uvicorn running on \u001b[1mhttp://0.0.0.0:8501\u001b[0m (Press CTRL+C to quit)\n",
+            "\u001b[32mINFO\u001b[0m:     122.209.127.130:0 - \"\u001b[1mGET / HTTP/1.1\u001b[0m\" \u001b[32m200 OK\u001b[0m\n",
+            "\u001b[32mINFO\u001b[0m:     122.209.127.130:0 - \"\u001b[1mGET /docs HTTP/1.1\u001b[0m\" \u001b[32m200 OK\u001b[0m\n",
+            "\u001b[32mINFO\u001b[0m:     122.209.127.130:0 - \"\u001b[1mGET / HTTP/1.1\u001b[0m\" \u001b[32m200 OK\u001b[0m\n",
+            "\u001b[32mINFO\u001b[0m:     122.209.127.130:0 - \"\u001b[1mGET /favicon.ico HTTP/1.1\u001b[0m\" \u001b[31m404 Not Found\u001b[0m\n",
+            "\u001b[32mINFO\u001b[0m:     122.209.127.130:0 - \"\u001b[1mGET /openapi.json HTTP/1.1\u001b[0m\" \u001b[32m200 OK\u001b[0m\n",
+            "\u001b[32mINFO\u001b[0m:     122.209.127.130:0 - \"\u001b[1mGET /docs HTTP/1.1\u001b[0m\" \u001b[32m200 OK\u001b[0m\n",
+            "\u001b[32mINFO\u001b[0m:     122.209.127.130:0 - \"\u001b[1mGET / HTTP/1.1\u001b[0m\" \u001b[32m200 OK\u001b[0m\n",
+            "\u001b[32mINFO\u001b[0m:     122.209.127.130:0 - \"\u001b[1mGET /docs HTTP/1.1\u001b[0m\" \u001b[32m200 OK\u001b[0m\n",
+            "t=2025-04-23T07:51:45+0000 lvl=warn msg=\"Stopping forwarder\" name=http-8501-33c1c7f2-db1b-41a6-b61e-0c8033f72811 acceptErr=\"failed to accept connection: Listener closed\"\n",
+            "t=2025-04-23T07:51:45+0000 lvl=warn msg=\"Error restarting forwarder\" name=http-8501-33c1c7f2-db1b-41a6-b61e-0c8033f72811 err=\"failed to start tunnel: session closed\"\n",
+            "\u001b[32mINFO\u001b[0m:     Shutting down\n",
+            "\u001b[32mINFO\u001b[0m:     Finished server process [\u001b[36m15175\u001b[0m]\n",
+            "\n",
+            "サーバープロセスが終了しました。\n",
+            "Task exception was never retrieved\n",
+            "future: <Task finished name='Task-1' coro=<Server.serve() done, defined at /usr/local/lib/python3.11/dist-packages/uvicorn/server.py:68> exception=KeyboardInterrupt()>\n",
+            "Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/uvicorn/main.py\", line 580, in run\n",
+            "    server.run()\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/uvicorn/server.py\", line 66, in run\n",
+            "    return asyncio.run(self.serve(sockets=sockets))\n",
+            "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/nest_asyncio.py\", line 30, in run\n",
+            "    return loop.run_until_complete(task)\n",
+            "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/nest_asyncio.py\", line 92, in run_until_complete\n",
+            "    self._run_once()\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/nest_asyncio.py\", line 133, in _run_once\n",
+            "    handle._run()\n",
+            "  File \"/usr/lib/python3.11/asyncio/events.py\", line 84, in _run\n",
+            "    self._context.run(self._callback, *self._args)\n",
+            "  File \"/usr/lib/python3.11/asyncio/tasks.py\", line 360, in __wakeup\n",
+            "    self.__step()\n",
+            "  File \"/usr/lib/python3.11/asyncio/tasks.py\", line 277, in __step\n",
+            "    result = coro.send(None)\n",
+            "             ^^^^^^^^^^^^^^^\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/uvicorn/server.py\", line 69, in serve\n",
+            "    with self.capture_signals():\n",
+            "  File \"/usr/lib/python3.11/contextlib.py\", line 144, in __exit__\n",
+            "    next(self.gen)\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/uvicorn/server.py\", line 330, in capture_signals\n",
+            "    signal.raise_signal(captured_signal)\n",
+            "KeyboardInterrupt\n",
+            "\u001b[31mERROR\u001b[0m:    Traceback (most recent call last):\n",
+            "  File \"/usr/local/lib/python3.11/dist-packages/starlette/routing.py\", line 699, in lifespan\n",
+            "    await receive()\n",
+            "GeneratorExit\n",
+            "\n",
+            "Task was destroyed but it is pending!\n",
+            "task: <Task pending name='Task-2' coro=<LifespanOn.main() done, defined at /usr/local/lib/python3.11/dist-packages/uvicorn/lifespan/on.py:78> wait_for=<Future cancelled>>\n"
+          ]
+        }
+      ],
+      "source": [
+        "!python app.py"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "RLubjIhbELSR"
+      },
+      "source": [
+        "FastAPIが起動すると、APIとクライアントが通信するためのURL（エンドポイント）が作られます。\n",
+        "\n",
+        "URLが作られるのと合わせて、Swagger UIというWebインターフェースが作られます。\n",
+        "\n",
+        "Swagger UIにアクセスすることで、APIの仕様を確認できたり、APIをテストすることができます。\n",
+        "\n",
+        "Swagger UIを利用することで、APIを通してLLMを動かしてみましょう。"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "XgumW3mGELSR"
+      },
+      "source": [
+        "後片付けとして、使う必要のないngrokのトンネルを削除します。"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "RJymTZio-WPJ"
+      },
+      "outputs": [],
+      "source": [
+        "from pyngrok import ngrok\n",
+        "ngrok.kill()"
+      ]
+    }
+  ],
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "gpuType": "T4",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "display_name": "Python 3",
+      "name": "python3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "accelerator": "GPU"
+  },
+  "nbformat": 4,
+  "nbformat_minor": 0
+}
